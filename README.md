@@ -1,6 +1,5 @@
 [![Build Status](https://app.travis-ci.com/virtines/wasp.svg?branch=main)](https://app.travis-ci.com/virtines/wasp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6350453.svg)](https://doi.org/10.5281/zenodo.6350453)
 
 # Wasp
 
@@ -24,12 +23,13 @@ virtine int foo(int arg) {
   * [Embedding Wasp](#embedding-wasp)
   * [Code Structure](#code-structure)
   * [Acknowledgements](#acknowledgements)
+  * [License](#license)
   * [Contact](#contact)
 
 ## Paper
 * [Isolating Functions at the Hardware Limit with Virtines](https://nickw.io/papers/eurosys22.pdf)<br>
-Nicholas C. Wanninger, Joshua J. Bowden, Kirtankumar Shetty, Ayush Garg, Kyle C. Hale<br>
-The 17th European Conference on Computer Systems (EuroSys '22).
+Nicholas C. Wanninger, Joshua J. Bowden, Kyle C. Hale<br>
+The 17th European Conference on Computer Systems (EuroSys '22, to appear)
 
 ### Experimental Platform in the Paper
 Note that the experiments in the paper were run on a Dell PowerEdge R6415
@@ -114,11 +114,10 @@ If the smoketest doesn't panic, Wasp is functional at this point. We tested
 this most recently on Chameleon Cloud Ubuntu 20.04.3 LTS (baremetal Skylake, 48
 cores, Xeon Gold 6126) with Linux kernel version 5.4.0-91-generic.
 
-If the smoke test does panic, it may be because `/dev/kvm` is owned by root. You probably
-want to add your user to the `kvm` group (e.g., `sudo usermod -a -G kvm <user>`).
-An alternative is to change permissions on `/dev/kvm` when gathering the artifacts.
-To do so, you can run `sudo chmod 666 /dev/kvm`, though you'll probably want to restore
-these permissions when you're done building the artifact.
+If the smoke test does panic, it may be because `/dev/kvm` is owned by root.
+It's advised to allow anyone to open `/dev/kvm` when gathering the artifacts.
+To do so, you can run `sudo chmod 666 /dev/kvm`. Feel free to restore it after running
+the artifact.
 
 ## Reproducing Paper Results
 
@@ -134,9 +133,8 @@ This will produce a `.tar` archive containing all relevant figures and data in `
 what is included from the paper:
 
 - Context creation experiment (`fig8.pdf`); Figures 2 and 8 from the paper. Figure 8 is a superset of Figure 2. 
-- Boot time breakdown (`data/table1.csv`); Table 1 from the paper. 
-- Mode latency experiment (`fig3.pdf`); Figure 3 from the paper. Note that the version if this figure in the paper has a false origin; 
-  the plot generated here does not.
+- Boot time breakdown (`data/table1.csv`); Table 1 from the paper.
+- Mode latency experiment (`fig3.pdf`); Figure 3 from the paper.
 - Echo server boot latency (`fig4.pdf`); Figure 4 from the paper.
 - Virtine creation latency microbenchmark (`fig11.pdf`); Figure 11 from the paper.
 - Effect of image size on virtine start-up latency  (`fig12.pdf`); Figure 12 from the paper.
@@ -175,15 +173,17 @@ looks like this:
 
 int main(int argc, char **argv) {
 	wasp::Virtine virtine;
-	// allocate 32kb to the virtine
-	virtine.allocate_memory(0x8000);
-	// load a flat binary into the virtine at address 0x1000
-	virtine.load_binary("virtine.bin", 0x1000);
+
+	// allocate ram as a contiguous chunk of 16kb (in page alignments)
+	virtine.allocate_memory(4096 * 4);
+
+	// load a flat binary into the virtine at address 0x8000
+	virtine.load_binary("virtine.bin", 0x8000);
 	while (1) {
 		// run the virtine until it exits by some mechanism
 		//   (there will eventually be a timeout :^) )
 		auto res = virtine.run();
-		if (res == wasp::ExitReason::HyperCall) {
+		if (res == wasp::ExitReason::Hypercall) {
 			// handle the hypercall by interfacing with the registers
 		}
 		if (res == wasp::ExitReason::Exited) break;
@@ -210,7 +210,7 @@ The final application can be compiled and run as follows:
 
 ```bash
 nasm -fbin virtine.asm -o virtine.bin
-g++ host.cpp -o host -lwasp
+gcc -lwasp host.cpp -o host
 ./host
 ```
 This should produce no output. The virtine will simply exit immediately. See the `test/` directory for some more concrete examples.
@@ -227,8 +227,8 @@ only a few things change:
 
 int main(int argc, char **argv) {
 
-	// allocate a cache of virtines that all have 16 pages of memory
-	wasp::Cache cache(4096 * 16);
+	// allocate a cache of virtines that all have 16kb of memory
+	wasp::Cache cache(4096 * 4);
 
 	// load the binary on the cache, not each virtine
 	cache.load_binary("virtine.bin", 0x8000);
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
 	while (1) {
 		// run the virtine, 
 		auto res = v->run();
-		if (res == wasp::ExitReason::HyperCall) {
+		if (res == wasp::ExitReason::Hypercall) {
 			// handle the hypercall by interfacing with the registers
 		}
 		if (res == wasp::ExitReason::Exited) break;
@@ -299,6 +299,9 @@ software.
 Wasp and the virtines codebase were made possible with support from the
 United States [National Science
 Foundation](https://nsf.gov) (NSF) via grants [CNS-1730689](https://nsf.gov/awardsearch/showAward?AWD_ID=1730689&HistoricalAwards=false), [REU-1757964](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1757964), [CNS-1718252](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1718252&HistoricalAwards=false), and [CNS-1763612](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1763612&HistoricalAwards=false).<br>
+
+## License
+[![MIT License](http://seawisphunter.com/minibuffer/api/MIT-License-transparent.png)](https://github.com/HExSA-Lab/nautilus/blob/master/LICENSE.txt)
 
 ## Contact
 The Wasp/virtines codebase is currently maintained by Nicholas Wanninger (ncw [at] u [dot] northwestern [dot] edu).

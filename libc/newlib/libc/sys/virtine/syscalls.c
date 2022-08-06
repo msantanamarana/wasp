@@ -156,6 +156,6 @@ void _fini(void) {}
 
 
 void __snapshot(void) {
-	int stack_top = 0;
-	__hypercall(0xFF, (unsigned long)&stack_top, __heap_top(), 0);
+	int bottom = 0;
+	// __hypercall(0xFF, (unsigned long)&bottom, __heap_top(), 0);
 }

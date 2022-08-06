@@ -11,8 +11,11 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>  //std::stringstream
+#include <sched.h>
+#include <atomic>
+#include "wasp_js_x.h"
 
-#define TEST_PATH "/usr/lib/jsinterp.bin"
+#define JSINTERP_PATH "/usr/lib/jsinterp.bin"
 
 
 
@@ -74,17 +77,21 @@ void dump_regs(wasp::VirtineRegisters *tf) {
 #define HCALL_isatty 12
 
 
-static bool use_snapshots = false;
+static bool use_snapshots = true;
 static bool do_teardown = false;
 static bool quiet = false;
+
+
+static std::atomic<int> hits;
+static std::atomic<int> misses;
 
 
 class VirtineJSEngine {
   wasp::Cache cache;
 
  public:
-  VirtineJSEngine() : cache(1024 * 1024 * 1) {
-    FILE *stream = fopen("/usr/lib/jsinterp.bin", "r");
+  VirtineJSEngine() : cache(1024 * 1024 * 1)  {
+    FILE *stream = fopen(JSINTERP_PATH, "r");
     if (stream == NULL) abort();
 
     fseek(stream, 0, SEEK_END);
@@ -98,16 +105,28 @@ class VirtineJSEngine {
     cache.set_binary(bin, sz, 0x8000);
   }
 
+  void get_cache_stats(int *misses, int *hits) {
+    *misses = cache.misses();
+    *hits = cache.hits();
+  }
 
-  std::string evaluate(const std::string &code) {
-    void *argument = (void *)code.data();
-    size_t argsize = code.size();
+  std::string evaluate(const char *code) {
+    void *argument = (void *)code;
+    size_t argsize = strlen(code);
 
+    int old_hits = cache.hits();
     wasp::Virtine *v = cache.get();
+    auto cur_hits = cache.hits();
+    if (old_hits != cur_hits) {
+      ::hits++;
+    } else {
+      ::misses++;
+    }
+
     bool done = false;
     std::string result;
-
     *v->translate<int>(0x1000) = do_teardown;
+
     while (!done) {
       int ex = v->run();
       if (ex == wasp::ExitReason::Crashed) {
@@ -118,8 +137,10 @@ class VirtineJSEngine {
 				printf("exit\n");
         break;
       }
+
       if (ex == wasp::ExitReason::HyperCall) {
         auto regs = v->read_regs();
+
 
         int nr = regs.rdi;
         long long arg1 = regs.rsi;
@@ -212,44 +233,22 @@ class VirtineJSEngine {
   }
 };
 
-int main(int argc, char **argv) {
-  int opt;
-  while ((opt = getopt(argc, argv, "qst")) != -1) {
-    switch (opt) {
-      case 'q':
-        quiet = true;
-        break;
-      case 's':
-        use_snapshots = true;
-        break;
-      case 't':
-        do_teardown = true;
-        break;
-    }
-  }
+// static VirtineJSEngine engine;
+static thread_local VirtineJSEngine engine;
 
-  if (optind > argc) {
-    fprintf(stderr, "usage: js [st] file.js\n");
-    exit(EXIT_FAILURE);
-  }
+extern "C" char* js_x(char* code1) {
+  auto start = wasp::time_us();
+  std::string ret = engine.evaluate(code1);
+  auto end = wasp::time_us();
+  fprintf(stderr,"exec: %lu, %lu, %d, %d\n", wasp::time_us(), end - start, hits.load(), misses.load());
+  return (char*)ret.c_str();
+}
 
-  VirtineJSEngine engine;
+extern "C" void get_cache_stats(int *misses, int *hits) {
+  *hits = ::hits.load();
+  *misses = ::misses.load();
+}
 
-  void *argument = 0;
-  size_t argsize = 0;
-
-  std::ifstream t(argv[optind]);
-  std::stringstream buffer;
-  buffer << t.rdbuf();
-  std::string code = buffer.str();  // str holds the content of the file
-
-//  printf("# trial, latency\n");
-//  for (int i = 0; i < 100; i++) {
-//    auto start = wasp::time_us();
-    std::string ar = engine.evaluate(code);
-    
-    //auto end = wasp::time_us();
-    //printf("%d,%lu\n", i, end - start);
-    printf("%s\n", ar.c_str());
- // }
+extern "C" void foo(){
+  printf("inside foo()\n");
 }

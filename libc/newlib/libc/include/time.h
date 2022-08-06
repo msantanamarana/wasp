@@ -294,6 +294,7 @@ extern "C" {
 
 #endif
 
+#if __GNU_VISIBLE
 
 #define CLOCK_MONOTONIC_RAW	((clockid_t) 5)
 
@@ -305,6 +306,7 @@ extern "C" {
 
 #define CLOCK_BOOTTIME_ALARM	((clockid_t) 9)
 
+#endif
 
 #if defined(_POSIX_CPUTIME)
 

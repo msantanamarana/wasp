@@ -241,6 +241,22 @@ extern "C" void wasp_run_virtine(const char *code, size_t codesz, size_t memsz, 
   // copy the argument out of the machine's ram
   if (arg != NULL) memcpy(arg, arg_pos, argsz);
 
+  //virtine_cache_lock.lock();
+  //get_cache(code, codesz, memsz).put(vm);
+  //virtine_cache_lock.unlock();
+  
+  //testing
+  
+  auto regs = vm->read_regs();
+  int ret = regs.rax;
+  int offset = (argsz-sizeof(int))/sizeof(int);
+  int* temp = (int*)arg_pos;
+
+  temp+=offset;
+  memcpy(temp, &ret, sizeof(int));
+
+  if (arg != NULL) memcpy(arg, arg_pos, argsz);
+
   virtine_cache_lock.lock();
   get_cache(code, codesz, memsz).put(vm);
   virtine_cache_lock.unlock();
